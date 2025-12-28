@@ -53,12 +53,17 @@ const changePinBtn = document.getElementById('changePinBtn');
 const removePinBtn = document.getElementById('removePinBtn');
 const settingsCloseBtn = document.getElementById('settingsCloseBtn');
 
-// API Configuration - Uses config.js or falls back to auto-detection
-const API_BASE_URL = (window.APP_CONFIG && window.APP_CONFIG.API_BASE_URL) || 
-                      window.API_BASE_URL || 
+// API Configuration - Supports both local development and Railway production
+// Priority: window.API_BASE_URL (set in index.html) > config.js > auto-detection
+const API_BASE_URL = window.API_BASE_URL || 
+                      (window.APP_CONFIG && window.APP_CONFIG.API_BASE_URL) || 
                       (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
-                        ? 'http://localhost:3000/api' 
-                        : `${window.location.protocol}//${window.location.hostname}${window.location.port ? ':' + window.location.port : ''}/api`);
+                        ? 'http://localhost:3000/api'  // Local development
+                        : `${window.location.protocol}//${window.location.hostname}${window.location.port ? ':' + window.location.port : ''}/api`); // Same origin
+
+// Log API URL for debugging (helpful to verify which URL is being used)
+console.log('API Base URL:', API_BASE_URL);
+
 const USER_ID_KEY = (window.APP_CONFIG && window.APP_CONFIG.USER_ID_KEY) || 'todoUserId';
 const PIN_STORAGE_KEY = (window.APP_CONFIG && window.APP_CONFIG.PIN_STORAGE_KEY) || 'todoPin';
 
@@ -226,6 +231,10 @@ async function apiRequest(url, options = {}) {
         return data;
     } catch (error) {
         console.error('API Error:', error);
+        // Add more details for network/CORS errors
+        if (error.message === 'Failed to fetch' || error.message.includes('CORS') || error.message.includes('network')) {
+            throw new Error(`Network error: Cannot connect to backend at ${API_BASE_URL}. Check if backend is running and CORS is configured.`);
+        }
         throw error;
     }
 }
@@ -632,7 +641,10 @@ async function addTask() {
         notesInput.value = '';
     } catch (error) {
         console.error('Failed to create task:', error);
-        alert('Failed to create task. Please make sure the backend is running on http://localhost:3000');
+        const errorMsg = API_BASE_URL.includes('localhost') 
+            ? 'Failed to create task. Please make sure the backend is running on http://localhost:3000'
+            : 'Failed to create task. Please check your backend connection.';
+        alert(errorMsg);
     }
 }
 
@@ -841,11 +853,24 @@ async function handlePinLogin() {
         return;
     }
     
-    if (await verifyPin(enteredPin)) {
-        showMainApp();
-    } else {
-        pinError.textContent = 'Incorrect PIN. Please try again.';
-        pinError.style.display = 'block';
+    try {
+        if (await verifyPin(enteredPin)) {
+            showMainApp();
+        } else {
+            pinError.textContent = 'PIN not found. Would you like to create a new account?';
+            pinError.style.display = 'block';
+            // Option: Clear stored PIN and show setup modal
+            // Or just show error and let them try again
+        }
+    } catch (error) {
+        // If PIN doesn't exist, offer to create new account
+        if (error.message.includes('Invalid PIN')) {
+            pinError.textContent = 'PIN not found. Click "Skip" below to create a new account without PIN, or close this modal to set up a new PIN.';
+            pinError.style.display = 'block';
+        } else {
+            pinError.textContent = 'Login failed. Please try again.';
+            pinError.style.display = 'block';
+        }
         pinLoginInput.value = '';
         pinLoginInput.focus();
     }
@@ -887,7 +912,8 @@ async function handlePinSetup() {
             showMainApp();
         }
     } catch (error) {
-        pinSetupError.textContent = 'Failed to set PIN. Please try again.';
+        console.error('PIN setup error:', error);
+        pinSetupError.textContent = `Failed to set PIN: ${error.message}. Check console for details.`;
         pinSetupError.style.display = 'block';
     }
 }
@@ -907,7 +933,8 @@ async function handleSkipPin() {
             showMainApp();
         }
     } catch (error) {
-        alert('Failed to initialize. Please make sure the backend is running.');
+        console.error('Skip PIN error:', error);
+        alert(`Failed to initialize: ${error.message}\n\nCheck browser console (F12) for details.\n\nMake sure:\n1. Backend is running on Railway\n2. API URL is correct\n3. CORS is configured`);
     }
 }
 
@@ -989,17 +1016,26 @@ async function initializeApp() {
     currentUserId = localStorage.getItem(USER_ID_KEY);
     console.log('Initializing app - PIN exists:', !!pin, 'User ID:', currentUserId);
     
-    if (pin && currentUserId) {
-        // PIN exists and user ID exists, show login modal
-        console.log('Showing PIN login (user ID exists)');
+    // For fresh Railway deployment, clear old localStorage if needed
+    // Check if we're on production (Railway) vs localhost
+    const isProduction = API_BASE_URL.includes('railway.app');
+    
+    if (pin && currentUserId && !isProduction) {
+        // PIN exists and user ID exists (local development), show login modal
+        console.log('Showing PIN login (user ID exists - local)');
         showPinLogin();
-    } else if (pin) {
-        // PIN exists but no user ID, show login modal
-        console.log('Showing PIN login (no user ID)');
+    } else if (pin && !isProduction) {
+        // PIN exists but no user ID (local development), show login modal
+        console.log('Showing PIN login (no user ID - local)');
         showPinLogin();
     } else {
-        // No PIN, show setup modal
-        console.log('Showing PIN setup');
+        // No PIN or production environment - show setup modal (fresh start)
+        console.log('Showing PIN setup (fresh start or production)');
+        // Clear any old localStorage for fresh start
+        if (isProduction) {
+            removePin();
+            localStorage.removeItem(USER_ID_KEY);
+        }
         showPinSetup();
     }
 }

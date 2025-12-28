@@ -1,0 +1,13 @@
+# Netlify configuration file
+# This tells Netlify how to serve your frontend
+
+[build]
+  # No build step needed - just serve static files
+  publish = "."
+
+[[redirects]]
+  # Redirect all routes to index.html for SPA (if needed)
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
