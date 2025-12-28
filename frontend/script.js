@@ -54,13 +54,13 @@ const removePinBtn = document.getElementById('removePinBtn');
 const settingsCloseBtn = document.getElementById('settingsCloseBtn');
 
 // API Configuration - Supports both local development and Railway production
-// Priority: window.API_BASE_URL (set in index.html) > hardcoded Railway URL > config.js > auto-detection
+// Priority: window.API_BASE_URL (set in index.html) > hardcoded Railway URL for production > config.js > auto-detection
 const API_BASE_URL = window.API_BASE_URL || 
-                      'https://sparkling-delight-production-2827.up.railway.app/api' || // Railway backend (production)
-                      (window.APP_CONFIG && window.APP_CONFIG.API_BASE_URL) || 
                       (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
                         ? 'http://localhost:3000/api'  // Local development
-                        : `${window.location.protocol}//${window.location.hostname}${window.location.port ? ':' + window.location.port : ''}/api`); // Same origin
+                        : 'https://sparkling-delight-production-2827.up.railway.app/api') || // Railway backend (production)
+                      (window.APP_CONFIG && window.APP_CONFIG.API_BASE_URL) || 
+                      `${window.location.protocol}//${window.location.hostname}${window.location.port ? ':' + window.location.port : ''}/api`; // Same origin fallback
 
 // Log API URL for debugging (helpful to verify which URL is being used)
 console.log('API Base URL:', API_BASE_URL);
